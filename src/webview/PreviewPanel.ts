@@ -9,189 +9,182 @@ import type { PreviewConfig } from '../parser/previewExtractor';
  * Manages the React component preview webview panel
  */
 export class PreviewPanel {
-  public static currentPanel: PreviewPanel | undefined;
+	public static currentPanel: PreviewPanel | undefined;
 
-  private readonly panel: vscode.WebviewPanel;
-  private readonly _extensionUri: vscode.Uri;
-  private disposables: vscode.Disposable[] = [];
-  private pendingPreview: { config: PreviewConfig; workspaceRoot: string } | null = null;
+	private readonly panel: vscode.WebviewPanel;
+	private readonly _extensionUri: vscode.Uri;
+	private disposables: vscode.Disposable[] = [];
+	private pendingPreview: { config: PreviewConfig; workspaceRoot: string } | null = null;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
-    this.panel = panel;
-    this._extensionUri = extensionUri;
+	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+		this.panel = panel;
+		this._extensionUri = extensionUri;
 
-    // Handle panel disposal
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+		// Handle panel disposal
+		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
-    // Handle messages from webview
-    this.panel.webview.onDidReceiveMessage(
-      (message) => this.handleWebviewMessage(message),
-      null,
-      this.disposables
-    );
-  }
+		// Handle messages from webview
+		this.panel.webview.onDidReceiveMessage(
+			(message) => this.handleWebviewMessage(message),
+			null,
+			this.disposables
+		);
+	}
 
-  /**
-   * Create or show the preview panel
-   */
-  public static createOrShow(
-    extensionUri: vscode.Uri,
-    viewColumn?: vscode.ViewColumn
-  ): PreviewPanel {
-    const column = viewColumn || vscode.ViewColumn.Beside;
+	/**
+	 * Create or show the preview panel
+	 */
+	public static createOrShow(
+		extensionUri: vscode.Uri,
+		viewColumn?: vscode.ViewColumn
+	): PreviewPanel {
+		const column = viewColumn || vscode.ViewColumn.Beside;
 
-    // If panel already exists, show it
-    if (PreviewPanel.currentPanel) {
-      PreviewPanel.currentPanel.panel.reveal(column);
-      return PreviewPanel.currentPanel;
-    }
+		// If panel already exists, show it
+		if (PreviewPanel.currentPanel) {
+			PreviewPanel.currentPanel.panel.reveal(column);
+			return PreviewPanel.currentPanel;
+		}
 
-    // Create new panel
-    const panel = vscode.window.createWebviewPanel(
-      'reactPreview',
-      'React Preview',
-      column,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(extensionUri, 'dist', 'webview')
-        ]
-      }
-    );
+		// Create new panel
+		const panel = vscode.window.createWebviewPanel('reactPreview', 'React Preview', column, {
+			enableScripts: true,
+			retainContextWhenHidden: true,
+			localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')]
+		});
 
-    PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
+		PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
 
-    // Set the initial HTML
-    PreviewPanel.currentPanel.panel.webview.html =
-      PreviewPanel.currentPanel.getWebviewHtml();
+		// Set the initial HTML
+		PreviewPanel.currentPanel.panel.webview.html = PreviewPanel.currentPanel.getWebviewHtml();
 
-    return PreviewPanel.currentPanel;
-  }
+		return PreviewPanel.currentPanel;
+	}
 
-  /**
-   * Handle messages from the webview
-   */
-  private async handleWebviewMessage(message: { type: string }): Promise<void> {
-    console.log('[extension] Received message from webview:', message.type);
+	/**
+	 * Handle messages from the webview
+	 */
+	private async handleWebviewMessage(message: { type: string }): Promise<void> {
+		console.log('[extension] Received message from webview:', message.type);
 
-    switch (message.type) {
-      case 'ready':
-        console.log('[extension] Webview ready, pendingPreview:', !!this.pendingPreview);
-        // Webview is ready, send pending preview if any
-        if (this.pendingPreview) {
-          await this.sendPreviewToWebview(
-            this.pendingPreview.config,
-            this.pendingPreview.workspaceRoot
-          );
-          this.pendingPreview = null;
-        }
-        break;
-      case 'refresh':
-        // Handle refresh request
-        if (this.pendingPreview) {
-          await this.sendPreviewToWebview(
-            this.pendingPreview.config,
-            this.pendingPreview.workspaceRoot
-          );
-        }
-        break;
-    }
-  }
+		switch (message.type) {
+			case 'ready':
+				console.log('[extension] Webview ready, pendingPreview:', !!this.pendingPreview);
+				// Webview is ready, send pending preview if any
+				if (this.pendingPreview) {
+					await this.sendPreviewToWebview(
+						this.pendingPreview.config,
+						this.pendingPreview.workspaceRoot
+					);
+					this.pendingPreview = null;
+				}
+				break;
+			case 'refresh':
+				// Handle refresh request
+				if (this.pendingPreview) {
+					await this.sendPreviewToWebview(
+						this.pendingPreview.config,
+						this.pendingPreview.workspaceRoot
+					);
+				}
+				break;
+		}
+	}
 
-  /**
-   * Update the panel with new preview content
-   */
-  public async updatePreview(
-    previewConfig: PreviewConfig,
-    workspaceRoot: string
-  ): Promise<void> {
-    const { componentName } = previewConfig;
+	/**
+	 * Update the panel with new preview content
+	 */
+	public async updatePreview(previewConfig: PreviewConfig, workspaceRoot: string): Promise<void> {
+		const { componentName } = previewConfig;
 
-    // Update panel title
-    this.panel.title = `Preview: ${componentName}`;
+		// Update panel title
+		this.panel.title = `Preview: ${componentName}`;
 
-    // Store the preview config for when webview is ready
-    this.pendingPreview = { config: previewConfig, workspaceRoot };
+		// Store the preview config for when webview is ready
+		this.pendingPreview = { config: previewConfig, workspaceRoot };
 
-    // Try to send immediately (webview might already be ready)
-    await this.sendPreviewToWebview(previewConfig, workspaceRoot);
-  }
+		// Try to send immediately (webview might already be ready)
+		await this.sendPreviewToWebview(previewConfig, workspaceRoot);
+	}
 
-  /**
-   * Send preview data to the webview
-   */
-  private async sendPreviewToWebview(
-    previewConfig: PreviewConfig,
-    workspaceRoot: string
-  ): Promise<void> {
-    const { componentPath, componentName, states, isDefaultExport } = previewConfig;
+	/**
+	 * Send preview data to the webview
+	 */
+	private async sendPreviewToWebview(
+		previewConfig: PreviewConfig,
+		workspaceRoot: string
+	): Promise<void> {
+		const { componentPath, componentName, states, isDefaultExport } = previewConfig;
 
-    console.log('[extension] sendPreviewToWebview:', componentName);
+		console.log('[extension] sendPreviewToWebview:', componentName);
 
-    try {
-      // Bundle the component
-      const bundleResult = await bundleComponent(
-        componentPath,
-        componentName,
-        states,
-        workspaceRoot,
-        isDefaultExport
-      );
+		try {
+			// Bundle the component
+			const bundleResult = await bundleComponent(
+				componentPath,
+				componentName,
+				states,
+				workspaceRoot,
+				isDefaultExport
+			);
 
-      console.log('[extension] Bundle result - errors:', bundleResult.errors.length, 'code length:', bundleResult.code.length);
+			console.log(
+				'[extension] Bundle result - errors:',
+				bundleResult.errors.length,
+				'code length:',
+				bundleResult.code.length
+			);
 
-      if (bundleResult.errors.length > 0) {
-        this.panel.webview.postMessage({
-          type: 'error',
-          componentName,
-          errors: bundleResult.errors
-        });
-        return;
-      }
+			if (bundleResult.errors.length > 0) {
+				this.panel.webview.postMessage({
+					type: 'error',
+					componentName,
+					errors: bundleResult.errors
+				});
+				return;
+			}
 
-      // Send update to webview
-      console.log('[extension] Posting update message to webview');
-      this.panel.webview.postMessage({
-        type: 'update',
-        componentName,
-        stateNames: states.map(s => s.name),
-        bundledCode: bundleResult.code
-      });
+			// Send update to webview
+			console.log('[extension] Posting update message to webview');
+			this.panel.webview.postMessage({
+				type: 'update',
+				componentName,
+				stateNames: states.map((s) => s.name),
+				bundledCode: bundleResult.code
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			this.panel.webview.postMessage({
+				type: 'error',
+				componentName,
+				errors: [message]
+			});
+		}
+	}
 
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.panel.webview.postMessage({
-        type: 'error',
-        componentName,
-        errors: [message]
-      });
-    }
-  }
+	/**
+	 * Get the webview HTML content by loading built webview-ui assets
+	 */
+	private getWebviewHtml(): string {
+		const webview = this.panel.webview;
+		const webviewPath = vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview');
 
-  /**
-   * Get the webview HTML content by loading built webview-ui assets
-   */
-  private getWebviewHtml(): string {
-    const webview = this.panel.webview;
-    const webviewPath = vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview');
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.js'));
+		const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.css'));
 
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.js'));
-    const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.css'));
+		const cssPath = path.join(this._extensionUri.fsPath, 'dist', 'webview', 'assets', 'index.css');
+		const hasCss = fs.existsSync(cssPath);
 
-    const cssPath = path.join(this._extensionUri.fsPath, 'dist', 'webview', 'assets', 'index.css');
-    const hasCss = fs.existsSync(cssPath);
+		const nonce = generateNonce();
+		const csp = [
+			"default-src 'none'",
+			`style-src ${webview.cspSource} 'unsafe-inline' https://cdn.tailwindcss.com`,
+			`script-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' ${webview.cspSource} https://cdn.tailwindcss.com`,
+			`img-src ${webview.cspSource} data: https:`
+		].join('; ');
 
-    const nonce = generateNonce();
-    const csp = [
-      "default-src 'none'",
-      `style-src ${webview.cspSource} 'unsafe-inline' https://cdn.tailwindcss.com`,
-      `script-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' ${webview.cspSource} https://cdn.tailwindcss.com`,
-      `img-src ${webview.cspSource} data: https:`,
-    ].join('; ');
-
-    // Safelist common shadcn/ui classes so Tailwind CDN generates them
-    const safelist = `
+		// Safelist common shadcn/ui classes so Tailwind CDN generates them
+		const safelist = `
       bg-primary bg-secondary bg-destructive bg-muted bg-accent bg-background
       text-primary text-secondary text-destructive text-muted text-accent text-foreground
       text-primary-foreground text-secondary-foreground text-destructive-foreground text-muted-foreground text-accent-foreground
@@ -207,7 +200,7 @@ export class PreviewPanel {
       transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
     `.trim();
 
-    return `<!DOCTYPE html>
+		return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -248,25 +241,25 @@ export class PreviewPanel {
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
-  }
+	}
 
-  /**
-   * Dispose of the panel
-   */
-  public dispose(): void {
-    PreviewPanel.currentPanel = undefined;
+	/**
+	 * Dispose of the panel
+	 */
+	public dispose(): void {
+		PreviewPanel.currentPanel = undefined;
 
-    this.panel.dispose();
+		this.panel.dispose();
 
-    while (this.disposables.length) {
-      const disposable = this.disposables.pop();
-      if (disposable) {
-        disposable.dispose();
-      }
-    }
-  }
+		while (this.disposables.length) {
+			const disposable = this.disposables.pop();
+			if (disposable) {
+				disposable.dispose();
+			}
+		}
+	}
 }
 
 function generateNonce(): string {
-  return randomBytes(16).toString('base64');
+	return randomBytes(16).toString('base64');
 }
