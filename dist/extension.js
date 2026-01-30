@@ -37,7 +37,7 @@ module.exports = __toCommonJS(extension_exports);
 
 // src/commands/previewComponent.ts
 var vscode2 = __toESM(require("vscode"));
-var path4 = __toESM(require("path"));
+var path5 = __toESM(require("path"));
 
 // src/parser/previewExtractor.ts
 var fs = __toESM(require("fs"));
@@ -301,402 +301,9 @@ function findPreviewFile(componentPath) {
 
 // src/webview/PreviewPanel.ts
 var vscode = __toESM(require("vscode"));
-
-// src/webview/webviewContent.ts
-function generateWebviewContent(options) {
-  const { bundledCode, componentName, stateNames, cspSource, nonce } = options;
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline' https://cdn.tailwindcss.com; script-src 'nonce-${nonce}' https://cdn.tailwindcss.com; img-src ${cspSource} data: https:;">
-  <title>Preview: ${escapeHtml(componentName)}</title>
-  <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
-  <script nonce="${nonce}">
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            border: 'hsl(var(--border, 220 13% 91%))',
-            input: 'hsl(var(--input, 220 13% 91%))',
-            ring: 'hsl(var(--ring, 224 71% 45%))',
-            background: 'hsl(var(--background, 0 0% 100%))',
-            foreground: 'hsl(var(--foreground, 224 71% 4%))',
-            primary: {
-              DEFAULT: 'hsl(var(--primary, 224 71% 45%))',
-              foreground: 'hsl(var(--primary-foreground, 0 0% 100%))',
-            },
-            secondary: {
-              DEFAULT: 'hsl(var(--secondary, 220 14% 96%))',
-              foreground: 'hsl(var(--secondary-foreground, 224 71% 4%))',
-            },
-            destructive: {
-              DEFAULT: 'hsl(var(--destructive, 0 84% 60%))',
-              foreground: 'hsl(var(--destructive-foreground, 0 0% 100%))',
-            },
-            muted: {
-              DEFAULT: 'hsl(var(--muted, 220 14% 96%))',
-              foreground: 'hsl(var(--muted-foreground, 220 9% 46%))',
-            },
-            accent: {
-              DEFAULT: 'hsl(var(--accent, 220 14% 96%))',
-              foreground: 'hsl(var(--accent-foreground, 224 71% 4%))',
-            },
-          },
-          borderRadius: {
-            lg: 'var(--radius, 0.5rem)',
-            md: 'calc(var(--radius, 0.5rem) - 2px)',
-            sm: 'calc(var(--radius, 0.5rem) - 4px)',
-          },
-        },
-      },
-    }
-  </script>
-  <style nonce="${nonce}">
-    :root {
-      --vscode-font-family: var(--vscode-editor-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-      --vscode-font-size: var(--vscode-editor-font-size, 14px);
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    /* shadcn/ui CSS variables */
-    :root {
-      --background: 0 0% 100%;
-      --foreground: 224 71% 4%;
-      --card: 0 0% 100%;
-      --card-foreground: 224 71% 4%;
-      --popover: 0 0% 100%;
-      --popover-foreground: 224 71% 4%;
-      --primary: 224 71% 45%;
-      --primary-foreground: 0 0% 100%;
-      --secondary: 220 14% 96%;
-      --secondary-foreground: 224 71% 4%;
-      --muted: 220 14% 96%;
-      --muted-foreground: 220 9% 46%;
-      --accent: 220 14% 96%;
-      --accent-foreground: 224 71% 4%;
-      --destructive: 0 84% 60%;
-      --destructive-foreground: 0 0% 100%;
-      --border: 220 13% 91%;
-      --input: 220 13% 91%;
-      --ring: 224 71% 45%;
-      --radius: 0.5rem;
-    }
-
-    .dark {
-      --background: 224 71% 4%;
-      --foreground: 0 0% 100%;
-      --card: 224 71% 4%;
-      --card-foreground: 0 0% 100%;
-      --popover: 224 71% 4%;
-      --popover-foreground: 0 0% 100%;
-      --primary: 224 71% 45%;
-      --primary-foreground: 0 0% 100%;
-      --secondary: 215 28% 17%;
-      --secondary-foreground: 0 0% 100%;
-      --muted: 215 28% 17%;
-      --muted-foreground: 220 9% 70%;
-      --accent: 215 28% 17%;
-      --accent-foreground: 0 0% 100%;
-      --destructive: 0 62% 50%;
-      --destructive-foreground: 0 0% 100%;
-      --border: 215 28% 17%;
-      --input: 215 28% 17%;
-      --ring: 224 71% 55%;
-    }
-
-    body {
-      margin: 0;
-      padding: 16px;
-      font-family: var(--vscode-font-family);
-      font-size: var(--vscode-font-size);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
-    }
-
-    .preview-header {
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--vscode-panel-border);
-    }
-
-    .preview-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-
-    .preview-header h1 {
-      margin: 0;
-      font-size: 1.4em;
-      font-weight: 500;
-      color: var(--vscode-foreground);
-    }
-
-    .preview-header .state-count {
-      margin-top: 4px;
-      font-size: 0.85em;
-      color: var(--vscode-descriptionForeground);
-    }
-
-    .theme-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border: 1px solid var(--vscode-panel-border);
-      border-radius: 6px;
-      background: transparent;
-      color: var(--vscode-foreground);
-      font-size: 12px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-
-    .theme-toggle:hover {
-      background-color: var(--vscode-list-hoverBackground);
-    }
-
-    .theme-toggle svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .theme-toggle .icon-sun,
-    .theme-toggle .icon-moon {
-      display: none;
-    }
-
-    .dark .theme-toggle .icon-sun {
-      display: block;
-    }
-
-    :not(.dark) .theme-toggle .icon-moon {
-      display: block;
-    }
-
-    .preview-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 16px;
-    }
-
-    .preview-item {
-      border: 1px solid hsl(var(--border));
-      border-radius: 6px;
-      overflow: hidden;
-      background-color: hsl(var(--background));
-    }
-
-    .preview-title {
-      margin: 0;
-      padding: 10px 12px;
-      font-size: 0.9em;
-      font-weight: 600;
-      background-color: hsl(var(--muted));
-      border-bottom: 1px solid hsl(var(--border));
-      color: hsl(var(--foreground));
-    }
-
-    .preview-content {
-      padding: 16px;
-      min-height: 100px;
-      background-color: hsl(var(--background));
-      color: hsl(var(--foreground));
-      border-radius: 0 0 5px 5px;
-    }
-
-    .preview-error {
-      padding: 12px;
-      background-color: var(--vscode-inputValidation-errorBackground);
-      border: 1px solid var(--vscode-inputValidation-errorBorder);
-      border-radius: 4px;
-      color: var(--vscode-errorForeground);
-    }
-
-    .preview-error strong {
-      display: block;
-      margin-bottom: 8px;
-    }
-
-    .preview-error pre {
-      margin: 0;
-      font-family: var(--vscode-editor-font-family);
-      font-size: 0.85em;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 200px;
-      color: var(--vscode-descriptionForeground);
-    }
-
-    .loading::after {
-      content: '';
-      width: 24px;
-      height: 24px;
-      margin-left: 12px;
-      border: 2px solid var(--vscode-progressBar-background);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .bundle-error {
-      padding: 20px;
-      background-color: var(--vscode-inputValidation-errorBackground);
-      border: 1px solid var(--vscode-inputValidation-errorBorder);
-      border-radius: 6px;
-      margin-top: 16px;
-    }
-
-    .bundle-error h2 {
-      margin: 0 0 12px 0;
-      color: var(--vscode-errorForeground);
-    }
-
-    .bundle-error pre {
-      margin: 0;
-      padding: 12px;
-      background-color: var(--vscode-editor-background);
-      border-radius: 4px;
-      overflow-x: auto;
-      font-family: var(--vscode-editor-font-family);
-      font-size: 0.85em;
-    }
-  </style>
-</head>
-<body>
-  <div class="preview-header">
-    <div>
-      <h1>${escapeHtml(componentName)}</h1>
-      <div class="state-count">${stateNames.length} state${stateNames.length !== 1 ? "s" : ""}: ${stateNames.map(escapeHtml).join(", ")}</div>
-    </div>
-    <button class="theme-toggle" id="theme-toggle" title="Toggle dark/light mode">
-      <svg class="icon-sun" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-      <svg class="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-      </svg>
-      <span class="theme-label"></span>
-    </button>
-  </div>
-  <div id="preview-root">
-    <div class="loading">Loading preview</div>
-  </div>
-  <script nonce="${nonce}">
-    (function() {
-      // Detect dark mode from VS Code theme (default)
-      const isDark = document.body.classList.contains('vscode-dark') ||
-                     document.body.getAttribute('data-vscode-theme-kind') === 'vscode-dark';
-      if (isDark) {
-        document.documentElement.classList.add('dark');
-      }
-
-      function updateThemeLabel() {
-        const label = document.querySelector('.theme-label');
-        if (label) {
-          label.textContent = document.documentElement.classList.contains('dark') ? 'Dark' : 'Light';
-        }
-      }
-
-      function toggleTheme() {
-        document.documentElement.classList.toggle('dark');
-        updateThemeLabel();
-      }
-
-      // Attach click handler
-      const toggleBtn = document.getElementById('theme-toggle');
-      if (toggleBtn) {
-        toggleBtn.addEventListener('click', toggleTheme);
-      }
-
-      updateThemeLabel();
-    })();
-  </script>
-  <script nonce="${nonce}">
-    ${bundledCode}
-  </script>
-</body>
-</html>`;
-}
-function generateErrorContent(componentName, errors, cspSource, nonce) {
-  const errorList = errors.map(escapeHtml).join("\n");
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline';">
-  <title>Preview Error: ${escapeHtml(componentName)}</title>
-  <style nonce="${nonce}">
-    body {
-      margin: 0;
-      padding: 20px;
-      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
-    }
-
-    .error-container {
-      padding: 20px;
-      background-color: var(--vscode-inputValidation-errorBackground);
-      border: 1px solid var(--vscode-inputValidation-errorBorder);
-      border-radius: 6px;
-    }
-
-    h1 {
-      margin: 0 0 16px 0;
-      color: var(--vscode-errorForeground);
-      font-size: 1.2em;
-    }
-
-    pre {
-      margin: 0;
-      padding: 16px;
-      background-color: var(--vscode-editor-background);
-      border-radius: 4px;
-      overflow-x: auto;
-      font-family: var(--vscode-editor-font-family);
-      font-size: 0.85em;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-  </style>
-</head>
-<body>
-  <div class="error-container">
-    <h1>Failed to bundle ${escapeHtml(componentName)}</h1>
-    <pre>${errorList}</pre>
-  </div>
-</body>
-</html>`;
-}
-function generateNonce() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let nonce = "";
-  for (let i = 0; i < 32; i++) {
-    nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return nonce;
-}
-function escapeHtml(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-}
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
+var import_crypto = require("crypto");
 
 // src/bundler/esbuildBundler.ts
 var esbuild = __toESM(require("esbuild"));
@@ -704,8 +311,13 @@ var path3 = __toESM(require("path"));
 var fs3 = __toESM(require("fs"));
 async function bundleComponent(componentPath, componentName, states, workspaceRoot, isDefaultExport = true) {
   const errors = [];
-  const entryCode = generateEntryPoint(componentPath, componentName, states, isDefaultExport);
-  const tempDir = path3.join(workspaceRoot, ".react-preview-temp");
+  const entryCode = generateEntryPoint(
+    componentPath,
+    componentName,
+    states,
+    isDefaultExport
+  );
+  const tempDir = path3.join(workspaceRoot, ".live-comp-temp");
   if (!fs3.existsSync(tempDir)) {
     fs3.mkdirSync(tempDir, { recursive: true });
   }
@@ -744,9 +356,7 @@ async function bundleComponent(componentPath, componentName, states, workspaceRo
       minify: false,
       sourcemap: false,
       // Handle CSS imports
-      plugins: [
-        cssPlugin()
-      ]
+      plugins: [cssPlugin()]
     });
     fs3.unlinkSync(entryPath);
     fs3.rmdirSync(tempDir, { recursive: true });
@@ -864,10 +474,16 @@ var PreviewPanel = class _PreviewPanel {
   panel;
   _extensionUri;
   disposables = [];
+  pendingPreview = null;
   constructor(panel, extensionUri) {
     this.panel = panel;
     this._extensionUri = extensionUri;
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+    this.panel.webview.onDidReceiveMessage(
+      (message) => this.handleWebviewMessage(message),
+      null,
+      this.disposables
+    );
   }
   /**
    * Create or show the preview panel
@@ -885,19 +501,56 @@ var PreviewPanel = class _PreviewPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: []
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, "dist", "webview")
+        ]
       }
     );
     _PreviewPanel.currentPanel = new _PreviewPanel(panel, extensionUri);
+    _PreviewPanel.currentPanel.panel.webview.html = _PreviewPanel.currentPanel.getWebviewHtml();
     return _PreviewPanel.currentPanel;
+  }
+  /**
+   * Handle messages from the webview
+   */
+  async handleWebviewMessage(message) {
+    console.log("[extension] Received message from webview:", message.type);
+    switch (message.type) {
+      case "ready":
+        console.log("[extension] Webview ready, pendingPreview:", !!this.pendingPreview);
+        if (this.pendingPreview) {
+          await this.sendPreviewToWebview(
+            this.pendingPreview.config,
+            this.pendingPreview.workspaceRoot
+          );
+          this.pendingPreview = null;
+        }
+        break;
+      case "refresh":
+        if (this.pendingPreview) {
+          await this.sendPreviewToWebview(
+            this.pendingPreview.config,
+            this.pendingPreview.workspaceRoot
+          );
+        }
+        break;
+    }
   }
   /**
    * Update the panel with new preview content
    */
   async updatePreview(previewConfig, workspaceRoot) {
-    const { componentPath, componentName, states, isDefaultExport } = previewConfig;
+    const { componentName } = previewConfig;
     this.panel.title = `Preview: ${componentName}`;
-    this.panel.webview.html = this.getLoadingHtml(componentName);
+    this.pendingPreview = { config: previewConfig, workspaceRoot };
+    await this.sendPreviewToWebview(previewConfig, workspaceRoot);
+  }
+  /**
+   * Send preview data to the webview
+   */
+  async sendPreviewToWebview(previewConfig, workspaceRoot) {
+    const { componentPath, componentName, states, isDefaultExport } = previewConfig;
+    console.log("[extension] sendPreviewToWebview:", componentName);
     try {
       const bundleResult = await bundleComponent(
         componentPath,
@@ -906,87 +559,102 @@ var PreviewPanel = class _PreviewPanel {
         workspaceRoot,
         isDefaultExport
       );
+      console.log("[extension] Bundle result - errors:", bundleResult.errors.length, "code length:", bundleResult.code.length);
       if (bundleResult.errors.length > 0) {
-        const nonce2 = generateNonce();
-        this.panel.webview.html = generateErrorContent(
+        this.panel.webview.postMessage({
+          type: "error",
           componentName,
-          bundleResult.errors,
-          this.panel.webview.cspSource,
-          nonce2
-        );
+          errors: bundleResult.errors
+        });
         return;
       }
-      const nonce = generateNonce();
-      this.panel.webview.html = generateWebviewContent({
-        bundledCode: bundleResult.code,
+      console.log("[extension] Posting update message to webview");
+      this.panel.webview.postMessage({
+        type: "update",
         componentName,
         stateNames: states.map((s) => s.name),
-        cspSource: this.panel.webview.cspSource,
-        nonce
+        bundledCode: bundleResult.code
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const nonce = generateNonce();
-      this.panel.webview.html = generateErrorContent(
+      this.panel.webview.postMessage({
+        type: "error",
         componentName,
-        [message],
-        this.panel.webview.cspSource,
-        nonce
-      );
+        errors: [message]
+      });
     }
   }
   /**
-   * Get loading HTML
+   * Get the webview HTML content by loading built webview-ui assets
    */
-  getLoadingHtml(componentName) {
+  getWebviewHtml() {
+    const webview = this.panel.webview;
+    const webviewPath = vscode.Uri.joinPath(this._extensionUri, "dist", "webview");
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, "assets", "index.js"));
+    const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, "assets", "index.css"));
+    const cssPath = path4.join(this._extensionUri.fsPath, "dist", "webview", "assets", "index.css");
+    const hasCss = fs4.existsSync(cssPath);
+    const nonce = generateNonce();
+    const csp = [
+      "default-src 'none'",
+      `style-src ${webview.cspSource} 'unsafe-inline' https://cdn.tailwindcss.com`,
+      `script-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' ${webview.cspSource} https://cdn.tailwindcss.com`,
+      `img-src ${webview.cspSource} data: https:`
+    ].join("; ");
+    const safelist = `
+      bg-primary bg-secondary bg-destructive bg-muted bg-accent bg-background
+      text-primary text-secondary text-destructive text-muted text-accent text-foreground
+      text-primary-foreground text-secondary-foreground text-destructive-foreground text-muted-foreground text-accent-foreground
+      border-primary border-secondary border-destructive border-muted border-accent border-input border-border
+      hover:bg-primary/90 hover:bg-secondary/80 hover:bg-destructive/90 hover:bg-accent hover:bg-muted
+      ring-ring focus:ring-ring focus-visible:ring-ring
+      rounded-sm rounded-md rounded-lg rounded-full
+      px-2 px-3 px-4 py-1 py-2 py-3 px-2.5 py-0.5
+      text-xs text-sm text-base text-lg font-medium font-semibold
+      inline-flex items-center justify-center gap-2
+      h-8 h-9 h-10 h-11 w-full
+      disabled:opacity-50 disabled:pointer-events-none
+      transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+    `.trim();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
-  <title>Loading: ${componentName}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
+  <meta http-equiv="Content-Security-Policy" content="${csp}">
+  <title>React Preview</title>
+  <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
+  <script nonce="${nonce}">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            border: 'hsl(var(--border))',
+            input: 'hsl(var(--input))',
+            ring: 'hsl(var(--ring))',
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+            secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+            destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+            muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+            accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+            card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+            popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+          },
+          borderRadius: { lg: 'var(--radius)', md: 'calc(var(--radius) - 2px)', sm: 'calc(var(--radius) - 4px)' },
+        },
+      },
     }
-
-    .loading {
-      text-align: center;
-    }
-
-    .spinner {
-      width: 40px;
-      height: 40px;
-      margin: 0 auto 16px;
-      border: 3px solid var(--vscode-progressBar-background);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .text {
-      color: var(--vscode-descriptionForeground);
-    }
-  </style>
+  </script>
+  ${hasCss ? `<link rel="stylesheet" href="${styleUri}">` : ""}
 </head>
 <body>
-  <div class="loading">
-    <div class="spinner"></div>
-    <div class="text">Bundling ${componentName}...</div>
-  </div>
+  <!-- Safelist for Tailwind CDN to pre-generate common classes -->
+  <div style="display:none!important" class="${safelist}"></div>
+  <div id="root"></div>
+  <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
   }
@@ -1004,6 +672,9 @@ var PreviewPanel = class _PreviewPanel {
     }
   }
 };
+function generateNonce() {
+  return (0, import_crypto.randomBytes)(16).toString("base64");
+}
 
 // src/commands/previewComponent.ts
 async function previewComponent(context, uri) {
@@ -1020,7 +691,7 @@ async function previewComponent(context, uri) {
     vscode2.window.showErrorMessage("No file selected. Open a React component file first.");
     return;
   }
-  const ext = path4.extname(filePath);
+  const ext = path5.extname(filePath);
   if (![".tsx", ".jsx", ".ts", ".js"].includes(ext)) {
     vscode2.window.showErrorMessage("Please select a React component file (.tsx, .jsx, .ts, or .js)");
     return;
@@ -1059,7 +730,7 @@ async function previewComponent(context, uri) {
 }
 function registerPreviewCommand(context) {
   return vscode2.commands.registerCommand(
-    "react-preview.previewComponent",
+    "live-comp.previewComponent",
     (uri) => previewComponent(context, uri)
   );
 }

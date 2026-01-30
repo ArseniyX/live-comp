@@ -1,5 +1,5 @@
 {
-  "name": "react-preview",
+  "name": "live-comp",
   "displayName": "React State Preview",
   "description": "Preview React components in multiple states (loading, error, empty, success) without running the full app",
   "version": "0.0.1",
@@ -17,7 +17,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "react-preview.previewComponent",
+        "command": "live-comp.previewComponent",
         "title": "Preview React Component States",
         "icon": "$(preview)"
       }
@@ -25,21 +25,21 @@
     "menus": {
       "explorer/context": [
         {
-          "command": "react-preview.previewComponent",
+          "command": "live-comp.previewComponent",
           "when": "resourceExtname == .tsx || resourceExtname == .jsx",
           "group": "navigation"
         }
       ],
       "editor/title": [
         {
-          "command": "react-preview.previewComponent",
+          "command": "live-comp.previewComponent",
           "when": "resourceExtname == .tsx || resourceExtname == .jsx",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "react-preview.previewComponent",
+          "command": "live-comp.previewComponent",
           "when": "resourceExtname == .tsx || resourceExtname == .jsx",
           "group": "navigation"
         }
@@ -48,11 +48,13 @@
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
-    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "build:webview": "cd webview-ui && pnpm run build",
+    "compile": "pnpm run build:webview && pnpm run check-types && pnpm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "watch:webview": "cd webview-ui && pnpm run build --watch",
+    "package": "pnpm run build:webview && pnpm run check-types && pnpm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",

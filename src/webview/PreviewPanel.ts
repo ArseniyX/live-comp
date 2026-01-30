@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { generateWebviewContent, generateErrorContent, generateNonce } from './webviewContent';
+import * as fs from 'fs';
+import * as path from 'path';
+import { randomBytes } from 'crypto';
 import { bundleComponent } from '../bundler/esbuildBundler';
 import type { PreviewConfig } from '../parser/previewExtractor';
 
@@ -12,6 +14,7 @@ export class PreviewPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private disposables: vscode.Disposable[] = [];
+  private pendingPreview: { config: PreviewConfig; workspaceRoot: string } | null = null;
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
@@ -19,6 +22,13 @@ export class PreviewPanel {
 
     // Handle panel disposal
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+    // Handle messages from webview
+    this.panel.webview.onDidReceiveMessage(
+      (message) => this.handleWebviewMessage(message),
+      null,
+      this.disposables
+    );
   }
 
   /**
@@ -44,12 +54,49 @@ export class PreviewPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: []
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, 'dist', 'webview')
+        ]
       }
     );
 
     PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
+
+    // Set the initial HTML
+    PreviewPanel.currentPanel.panel.webview.html =
+      PreviewPanel.currentPanel.getWebviewHtml();
+
     return PreviewPanel.currentPanel;
+  }
+
+  /**
+   * Handle messages from the webview
+   */
+  private async handleWebviewMessage(message: { type: string }): Promise<void> {
+    console.log('[extension] Received message from webview:', message.type);
+
+    switch (message.type) {
+      case 'ready':
+        console.log('[extension] Webview ready, pendingPreview:', !!this.pendingPreview);
+        // Webview is ready, send pending preview if any
+        if (this.pendingPreview) {
+          await this.sendPreviewToWebview(
+            this.pendingPreview.config,
+            this.pendingPreview.workspaceRoot
+          );
+          this.pendingPreview = null;
+        }
+        break;
+      case 'refresh':
+        // Handle refresh request
+        if (this.pendingPreview) {
+          await this.sendPreviewToWebview(
+            this.pendingPreview.config,
+            this.pendingPreview.workspaceRoot
+          );
+        }
+        break;
+    }
   }
 
   /**
@@ -59,13 +106,28 @@ export class PreviewPanel {
     previewConfig: PreviewConfig,
     workspaceRoot: string
   ): Promise<void> {
-    const { componentPath, componentName, states, isDefaultExport } = previewConfig;
+    const { componentName } = previewConfig;
 
     // Update panel title
     this.panel.title = `Preview: ${componentName}`;
 
-    // Show loading state
-    this.panel.webview.html = this.getLoadingHtml(componentName);
+    // Store the preview config for when webview is ready
+    this.pendingPreview = { config: previewConfig, workspaceRoot };
+
+    // Try to send immediately (webview might already be ready)
+    await this.sendPreviewToWebview(previewConfig, workspaceRoot);
+  }
+
+  /**
+   * Send preview data to the webview
+   */
+  private async sendPreviewToWebview(
+    previewConfig: PreviewConfig,
+    workspaceRoot: string
+  ): Promise<void> {
+    const { componentPath, componentName, states, isDefaultExport } = previewConfig;
+
+    console.log('[extension] sendPreviewToWebview:', componentName);
 
     try {
       // Bundle the component
@@ -77,92 +139,113 @@ export class PreviewPanel {
         isDefaultExport
       );
 
+      console.log('[extension] Bundle result - errors:', bundleResult.errors.length, 'code length:', bundleResult.code.length);
+
       if (bundleResult.errors.length > 0) {
-        // Show error content
-        const nonce = generateNonce();
-        this.panel.webview.html = generateErrorContent(
+        this.panel.webview.postMessage({
+          type: 'error',
           componentName,
-          bundleResult.errors,
-          this.panel.webview.cspSource,
-          nonce
-        );
+          errors: bundleResult.errors
+        });
         return;
       }
 
-      // Generate and set preview content
-      const nonce = generateNonce();
-      this.panel.webview.html = generateWebviewContent({
-        bundledCode: bundleResult.code,
+      // Send update to webview
+      console.log('[extension] Posting update message to webview');
+      this.panel.webview.postMessage({
+        type: 'update',
         componentName,
         stateNames: states.map(s => s.name),
-        cspSource: this.panel.webview.cspSource,
-        nonce
+        bundledCode: bundleResult.code
       });
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const nonce = generateNonce();
-      this.panel.webview.html = generateErrorContent(
+      this.panel.webview.postMessage({
+        type: 'error',
         componentName,
-        [message],
-        this.panel.webview.cspSource,
-        nonce
-      );
+        errors: [message]
+      });
     }
   }
 
   /**
-   * Get loading HTML
+   * Get the webview HTML content by loading built webview-ui assets
    */
-  private getLoadingHtml(componentName: string): string {
+  private getWebviewHtml(): string {
+    const webview = this.panel.webview;
+    const webviewPath = vscode.Uri.joinPath(this._extensionUri, 'dist', 'webview');
+
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.js'));
+    const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(webviewPath, 'assets', 'index.css'));
+
+    const cssPath = path.join(this._extensionUri.fsPath, 'dist', 'webview', 'assets', 'index.css');
+    const hasCss = fs.existsSync(cssPath);
+
+    const nonce = generateNonce();
+    const csp = [
+      "default-src 'none'",
+      `style-src ${webview.cspSource} 'unsafe-inline' https://cdn.tailwindcss.com`,
+      `script-src 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' ${webview.cspSource} https://cdn.tailwindcss.com`,
+      `img-src ${webview.cspSource} data: https:`,
+    ].join('; ');
+
+    // Safelist common shadcn/ui classes so Tailwind CDN generates them
+    const safelist = `
+      bg-primary bg-secondary bg-destructive bg-muted bg-accent bg-background
+      text-primary text-secondary text-destructive text-muted text-accent text-foreground
+      text-primary-foreground text-secondary-foreground text-destructive-foreground text-muted-foreground text-accent-foreground
+      border-primary border-secondary border-destructive border-muted border-accent border-input border-border
+      hover:bg-primary/90 hover:bg-secondary/80 hover:bg-destructive/90 hover:bg-accent hover:bg-muted
+      ring-ring focus:ring-ring focus-visible:ring-ring
+      rounded-sm rounded-md rounded-lg rounded-full
+      px-2 px-3 px-4 py-1 py-2 py-3 px-2.5 py-0.5
+      text-xs text-sm text-base text-lg font-medium font-semibold
+      inline-flex items-center justify-center gap-2
+      h-8 h-9 h-10 h-11 w-full
+      disabled:opacity-50 disabled:pointer-events-none
+      transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+    `.trim();
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
-  <title>Loading: ${componentName}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
+  <meta http-equiv="Content-Security-Policy" content="${csp}">
+  <title>React Preview</title>
+  <script src="https://cdn.tailwindcss.com" nonce="${nonce}"></script>
+  <script nonce="${nonce}">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            border: 'hsl(var(--border))',
+            input: 'hsl(var(--input))',
+            ring: 'hsl(var(--ring))',
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
+            secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+            destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+            muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+            accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+            card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+            popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+          },
+          borderRadius: { lg: 'var(--radius)', md: 'calc(var(--radius) - 2px)', sm: 'calc(var(--radius) - 4px)' },
+        },
+      },
     }
-
-    .loading {
-      text-align: center;
-    }
-
-    .spinner {
-      width: 40px;
-      height: 40px;
-      margin: 0 auto 16px;
-      border: 3px solid var(--vscode-progressBar-background);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .text {
-      color: var(--vscode-descriptionForeground);
-    }
-  </style>
+  </script>
+  ${hasCss ? `<link rel="stylesheet" href="${styleUri}">` : ''}
 </head>
 <body>
-  <div class="loading">
-    <div class="spinner"></div>
-    <div class="text">Bundling ${componentName}...</div>
-  </div>
+  <!-- Safelist for Tailwind CDN to pre-generate common classes -->
+  <div style="display:none!important" class="${safelist}"></div>
+  <div id="root"></div>
+  <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
   }
@@ -182,4 +265,8 @@ export class PreviewPanel {
       }
     }
   }
+}
+
+function generateNonce(): string {
+  return randomBytes(16).toString('base64');
 }

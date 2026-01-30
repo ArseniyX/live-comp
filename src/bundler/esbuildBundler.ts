@@ -1,99 +1,101 @@
-import * as esbuild from 'esbuild';
-import * as path from 'path';
-import * as fs from 'fs';
-import type { PreviewState } from '../parser/previewExtractor';
+import * as esbuild from "esbuild";
+import * as path from "path";
+import * as fs from "fs";
+import type { PreviewState } from "../parser/previewExtractor";
 
 export interface BundleResult {
-  code: string;
-  errors: string[];
+    code: string;
+    errors: string[];
 }
 
 /**
  * Bundle a React component with its preview states using esbuild
  */
 export async function bundleComponent(
-  componentPath: string,
-  componentName: string,
-  states: PreviewState[],
-  workspaceRoot: string,
-  isDefaultExport: boolean = true
+    componentPath: string,
+    componentName: string,
+    states: PreviewState[],
+    workspaceRoot: string,
+    isDefaultExport: boolean = true,
 ): Promise<BundleResult> {
-  const errors: string[] = [];
+    const errors: string[] = [];
 
-  // Generate virtual entry point
-  const entryCode = generateEntryPoint(componentPath, componentName, states, isDefaultExport);
+    // Generate virtual entry point
+    const entryCode = generateEntryPoint(
+        componentPath,
+        componentName,
+        states,
+        isDefaultExport,
+    );
 
-  // Create a temporary entry file
-  const tempDir = path.join(workspaceRoot, '.react-preview-temp');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
-  const entryPath = path.join(tempDir, 'preview-entry.tsx');
-  fs.writeFileSync(entryPath, entryCode);
-
-  try {
-    const result = await esbuild.build({
-      entryPoints: [entryPath],
-      bundle: true,
-      write: false,
-      format: 'iife',
-      globalName: 'ReactPreview',
-      target: 'es2020',
-      jsx: 'automatic',
-      jsxImportSource: 'react',
-      loader: {
-        '.tsx': 'tsx',
-        '.ts': 'ts',
-        '.jsx': 'jsx',
-        '.js': 'js',
-        '.css': 'css',
-        '.json': 'json',
-        '.svg': 'dataurl',
-        '.png': 'dataurl',
-        '.jpg': 'dataurl',
-        '.gif': 'dataurl'
-      },
-      define: {
-        'process.env.NODE_ENV': '"development"'
-      },
-      // Resolve from user's workspace node_modules
-      nodePaths: [path.join(workspaceRoot, 'node_modules')],
-      resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
-      // External packages that should not be bundled (provided by webview)
-      external: [],
-      minify: false,
-      sourcemap: false,
-      // Handle CSS imports
-      plugins: [
-        cssPlugin()
-      ]
-    });
-
-    // Clean up temp file
-    fs.unlinkSync(entryPath);
-    fs.rmdirSync(tempDir, { recursive: true });
-
-    if (result.errors.length > 0) {
-      errors.push(...result.errors.map(e => e.text));
+    // Create a temporary entry file
+    const tempDir = path.join(workspaceRoot, ".live-comp-temp");
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
     }
 
-    const code = result.outputFiles?.[0]?.text || '';
-    return { code, errors };
+    const entryPath = path.join(tempDir, "preview-entry.tsx");
+    fs.writeFileSync(entryPath, entryCode);
 
-  } catch (error) {
-    // Clean up on error
-    if (fs.existsSync(entryPath)) {
-      fs.unlinkSync(entryPath);
-    }
-    if (fs.existsSync(tempDir)) {
-      fs.rmdirSync(tempDir, { recursive: true });
-    }
+    try {
+        const result = await esbuild.build({
+            entryPoints: [entryPath],
+            bundle: true,
+            write: false,
+            format: "iife",
+            globalName: "ReactPreview",
+            target: "es2020",
+            jsx: "automatic",
+            jsxImportSource: "react",
+            loader: {
+                ".tsx": "tsx",
+                ".ts": "ts",
+                ".jsx": "jsx",
+                ".js": "js",
+                ".css": "css",
+                ".json": "json",
+                ".svg": "dataurl",
+                ".png": "dataurl",
+                ".jpg": "dataurl",
+                ".gif": "dataurl",
+            },
+            define: {
+                "process.env.NODE_ENV": '"development"',
+            },
+            // Resolve from user's workspace node_modules
+            nodePaths: [path.join(workspaceRoot, "node_modules")],
+            resolveExtensions: [".tsx", ".ts", ".jsx", ".js", ".json"],
+            // External packages that should not be bundled (provided by webview)
+            external: [],
+            minify: false,
+            sourcemap: false,
+            // Handle CSS imports
+            plugins: [cssPlugin()],
+        });
 
-    const message = error instanceof Error ? error.message : String(error);
-    errors.push(message);
-    return { code: '', errors };
-  }
+        // Clean up temp file
+        fs.unlinkSync(entryPath);
+        fs.rmdirSync(tempDir, { recursive: true });
+
+        if (result.errors.length > 0) {
+            errors.push(...result.errors.map((e) => e.text));
+        }
+
+        const code = result.outputFiles?.[0]?.text || "";
+        return { code, errors };
+    } catch (error) {
+        // Clean up on error
+        if (fs.existsSync(entryPath)) {
+            fs.unlinkSync(entryPath);
+        }
+        if (fs.existsSync(tempDir)) {
+            fs.rmdirSync(tempDir, { recursive: true });
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(message);
+        return { code: "", errors };
+    }
 }
 
 /**
@@ -101,20 +103,20 @@ export async function bundleComponent(
  * Instead of parsing and reconstructing props, we import the preview object directly
  */
 function generateEntryPoint(
-  componentPath: string,
-  componentName: string,
-  _states: PreviewState[],
-  isDefaultExport: boolean
+    componentPath: string,
+    componentName: string,
+    _states: PreviewState[],
+    isDefaultExport: boolean,
 ): string {
-  const relativePath = componentPath.replace(/\\/g, '/');
+    const relativePath = componentPath.replace(/\\/g, "/");
 
-  // Generate the correct import statement based on export type
-  // Always import the preview object as well
-  const componentImport = isDefaultExport
-    ? `import Component, { preview } from '${relativePath}';`
-    : `import { ${componentName} as Component, preview } from '${relativePath}';`;
+    // Generate the correct import statement based on export type
+    // Always import the preview object as well
+    const componentImport = isDefaultExport
+        ? `import Component, { preview } from '${relativePath}';`
+        : `import { ${componentName} as Component, preview } from '${relativePath}';`;
 
-  return `
+    return `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 ${componentImport}
@@ -186,23 +188,23 @@ if (document.readyState === 'loading') {
  * esbuild plugin to handle CSS imports
  */
 function cssPlugin(): esbuild.Plugin {
-  return {
-    name: 'css-collector',
-    setup(build) {
-      build.onLoad({ filter: /\.css$/ }, async (args) => {
-        const css = await fs.promises.readFile(args.path, 'utf8');
-        // Inject CSS as a side effect
-        return {
-          contents: `
+    return {
+        name: "css-collector",
+        setup(build) {
+            build.onLoad({ filter: /\.css$/ }, async (args) => {
+                const css = await fs.promises.readFile(args.path, "utf8");
+                // Inject CSS as a side effect
+                return {
+                    contents: `
             (function() {
               const style = document.createElement('style');
               style.textContent = ${JSON.stringify(css)};
               document.head.appendChild(style);
             })();
           `,
-          loader: 'js'
-        };
-      });
-    }
-  };
+                    loader: "js",
+                };
+            });
+        },
+    };
 }

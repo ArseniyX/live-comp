@@ -82,7 +82,7 @@ export async function previewComponent(
  */
 export function registerPreviewCommand(context: vscode.ExtensionContext): vscode.Disposable {
   return vscode.commands.registerCommand(
-    'react-preview.previewComponent',
+    'live-comp.previewComponent',
     (uri?: vscode.Uri) => previewComponent(context, uri)
   );
 }
