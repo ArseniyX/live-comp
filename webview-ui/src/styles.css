@@ -1,5 +1,12 @@
 :root {
-  --vscode-font-family: var(--vscode-editor-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  --vscode-font-family: var(
+    --vscode-editor-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif
+  );
   --vscode-font-size: var(--vscode-editor-font-size, 14px);
 
   /* shadcn/ui CSS variables - light mode */
@@ -52,12 +59,14 @@
 }
 
 body {
-  margin: 0;
-  padding: 16px;
+  margin: 0 !important;
+  padding: 16px !important;
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
   color: var(--vscode-foreground);
   background-color: var(--vscode-editor-background);
+  overflow: auto !important;
+  position: static !important;
 }
 
 /* Header */

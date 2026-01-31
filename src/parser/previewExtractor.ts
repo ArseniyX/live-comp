@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { Project, Node } from 'ts-morph';
 
 export interface PreviewState {
 	name: string;
-	props: Record<string, unknown>;
+	props: string; // Raw props text - we don't parse, just pass through for override
 }
 
 export interface PreviewConfig {
@@ -13,21 +14,27 @@ export interface PreviewConfig {
 	isDefaultExport: boolean;
 }
 
+const project = new Project({
+	useInMemoryFileSystem: true,
+	compilerOptions: {
+		allowJs: true,
+		jsx: 2 // React
+	}
+});
+
 /**
  * Extract preview configuration from a component file or its colocated .preview.ts file
  */
 export async function extractPreviewConfig(filePath: string): Promise<PreviewConfig | null> {
 	const content = await fs.promises.readFile(filePath, 'utf-8');
 
-	// Detect export type
-	const defaultExportName = extractDefaultExportName(content);
-	const namedExportName = extractNamedExportName(content);
-	const isDefaultExport = defaultExportName !== null;
-	const componentName =
-		defaultExportName || namedExportName || path.basename(filePath, path.extname(filePath));
+	const sourceFile = project.createSourceFile('temp.tsx', content, { overwrite: true });
+
+	// Detect export type using AST
+	const { componentName, isDefaultExport } = extractComponentInfo(sourceFile, filePath);
 
 	// First, try to find inline preview export
-	const inlinePreview = parsePreviewExport(content);
+	const inlinePreview = parsePreviewExport(sourceFile);
 	if (inlinePreview) {
 		return {
 			states: inlinePreview,
@@ -41,7 +48,10 @@ export async function extractPreviewConfig(filePath: string): Promise<PreviewCon
 	const previewFilePath = findColocatedPreviewFile(filePath);
 	if (previewFilePath) {
 		const previewContent = await fs.promises.readFile(previewFilePath, 'utf-8');
-		const previewStates = parsePreviewExport(previewContent);
+		const previewSourceFile = project.createSourceFile('preview.tsx', previewContent, {
+			overwrite: true
+		});
+		const previewStates = parsePreviewExport(previewSourceFile);
 		if (previewStates) {
 			return {
 				states: previewStates,
@@ -56,254 +66,105 @@ export async function extractPreviewConfig(filePath: string): Promise<PreviewCon
 }
 
 /**
- * Parse the preview export from file content
+ * Extract component name and export type from AST
+ */
+function extractComponentInfo(
+	sourceFile: ReturnType<typeof project.createSourceFile>,
+	filePath: string
+): { componentName: string; isDefaultExport: boolean } {
+	// Check for default export
+	const defaultExport = sourceFile.getDefaultExportSymbol();
+	if (defaultExport) {
+		const declarations = defaultExport.getDeclarations();
+		for (const decl of declarations) {
+			// export default function ComponentName
+			if (Node.isFunctionDeclaration(decl)) {
+				const name = decl.getName();
+				if (name) {
+					return { componentName: name, isDefaultExport: true };
+				}
+			}
+			// export default ComponentName (identifier)
+			if (Node.isExportAssignment(decl)) {
+				const expr = decl.getExpression();
+				if (Node.isIdentifier(expr)) {
+					return { componentName: expr.getText(), isDefaultExport: true };
+				}
+			}
+		}
+		// Fallback for default export
+		return {
+			componentName: path.basename(filePath, path.extname(filePath)),
+			isDefaultExport: true
+		};
+	}
+
+	// Check for named exports - find PascalCase function/const (likely React component)
+	const exportedDeclarations = sourceFile.getExportedDeclarations();
+	for (const [name] of exportedDeclarations) {
+		if (
+			/^[A-Z][a-zA-Z0-9]*$/.test(name) &&
+			name !== 'Preview' &&
+			!name.toLowerCase().includes('preview')
+		) {
+			return { componentName: name, isDefaultExport: false };
+		}
+	}
+
+	// Fallback to filename
+	return { componentName: path.basename(filePath, path.extname(filePath)), isDefaultExport: false };
+}
+
+/**
+ * Parse the preview export from AST
  * Looks for: export const preview = { ... }
  */
-function parsePreviewExport(content: string): PreviewState[] | null {
-	// Match export const preview = { ... } or export const preview: PreviewConfig = { ... }
-	const previewRegex = /export\s+const\s+preview\s*(?::\s*[^=]+)?\s*=\s*(\{[\s\S]*?\n\});?/;
-	const match = content.match(previewRegex);
+function parsePreviewExport(
+	sourceFile: ReturnType<typeof project.createSourceFile>
+): PreviewState[] | null {
+	const exportedDeclarations = sourceFile.getExportedDeclarations();
+	const previewDecl = exportedDeclarations.get('preview');
 
-	if (!match) {
+	if (!previewDecl || previewDecl.length === 0) {
 		return null;
 	}
 
-	try {
-		const previewObjectStr = match[1];
-		return parsePreviewObject(previewObjectStr);
-	} catch {
+	const decl = previewDecl[0];
+
+	// Find the variable declaration
+	if (!Node.isVariableDeclaration(decl)) {
 		return null;
 	}
-}
 
-/**
- * Parse the preview object string into PreviewState array
- * Handles object syntax like: { loading: { isLoading: true }, error: { error: new Error('...') } }
- */
-function parsePreviewObject(objectStr: string): PreviewState[] {
+	const initializer = decl.getInitializer();
+	if (!initializer || !Node.isObjectLiteralExpression(initializer)) {
+		return null;
+	}
+
 	const states: PreviewState[] = [];
 
-	// Remove outer braces and split by top-level properties
-	const inner = objectStr.slice(1, -1).trim();
+	for (const prop of initializer.getProperties()) {
+		if (Node.isPropertyAssignment(prop)) {
+			const name = prop.getName();
+			const value = prop.getInitializer();
 
-	// Use a simple state machine to extract key-value pairs at the top level
-	let depth = 0;
-	let currentKey = '';
-	let currentValue = '';
-	let inKey = true;
-	let inString = false;
-	let stringChar = '';
-
-	for (let i = 0; i < inner.length; i++) {
-		const char = inner[i];
-		const prevChar = i > 0 ? inner[i - 1] : '';
-
-		// Handle string boundaries
-		if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-			if (!inString) {
-				inString = true;
-				stringChar = char;
-			} else if (char === stringChar) {
-				inString = false;
+			if (value) {
+				states.push({
+					name,
+					props: value.getText()
+				});
 			}
-		}
-
-		if (!inString) {
-			if (char === '{' || char === '[' || char === '(') {
-				depth++;
-			} else if (char === '}' || char === ']' || char === ')') {
-				depth--;
-			}
-
-			// At top level, look for key: value separators
-			if (depth === 0 && char === ':' && inKey) {
-				inKey = false;
-				continue;
-			}
-
-			// At top level, comma separates entries
-			if (depth === 0 && char === ',') {
-				if (currentKey.trim() && currentValue.trim()) {
-					states.push({
-						name: currentKey.trim(),
-						props: safeParseProps(currentValue.trim())
-					});
-				}
-				currentKey = '';
-				currentValue = '';
-				inKey = true;
-				continue;
-			}
-		}
-
-		if (inKey) {
-			currentKey += char;
-		} else {
-			currentValue += char;
+		} else if (Node.isShorthandPropertyAssignment(prop)) {
+			// Handle { loading } shorthand syntax
+			const name = prop.getName();
+			states.push({
+				name,
+				props: name
+			});
 		}
 	}
 
-	// Don't forget the last entry
-	if (currentKey.trim() && currentValue.trim()) {
-		states.push({
-			name: currentKey.trim(),
-			props: safeParseProps(currentValue.trim())
-		});
-	}
-
-	return states;
-}
-
-/**
- * Safely parse props string into an object
- * For complex expressions, we store the raw string
- */
-function safeParseProps(propsStr: string): Record<string, unknown> {
-	// If it's a simple object literal, try to parse key-value pairs
-	if (propsStr.startsWith('{') && propsStr.endsWith('}')) {
-		const inner = propsStr.slice(1, -1).trim();
-		const props: Record<string, unknown> = {};
-
-		// Simple regex for basic key: value pairs
-		const propRegex = /(\w+)\s*:\s*([^,]+?)(?:,|$)/g;
-		let propMatch;
-
-		while ((propMatch = propRegex.exec(inner)) !== null) {
-			const key = propMatch[1];
-			const value = propMatch[2].trim();
-			props[key] = parseValue(value);
-		}
-
-		return props;
-	}
-
-	// Return raw string representation for complex cases
-	return { __raw: propsStr };
-}
-
-/**
- * Parse a value string into its JavaScript representation
- */
-function parseValue(valueStr: string): unknown {
-	const trimmed = valueStr.trim();
-
-	if (trimmed === 'true') {
-		return true;
-	}
-	if (trimmed === 'false') {
-		return false;
-	}
-	if (trimmed === 'null') {
-		return null;
-	}
-	if (trimmed === 'undefined') {
-		return undefined;
-	}
-
-	// Number
-	if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-		return parseFloat(trimmed);
-	}
-
-	// String literal
-	if (
-		(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-		(trimmed.startsWith("'") && trimmed.endsWith("'"))
-	) {
-		return trimmed.slice(1, -1);
-	}
-
-	// Array
-	if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-		return trimmed; // Keep as string for now
-	}
-
-	// Object or complex expression - keep as raw
-	return trimmed;
-}
-
-/**
- * Extract the default export component name
- */
-function extractDefaultExportName(content: string): string | null {
-	// Match: export default function ComponentName
-	const funcMatch = content.match(/export\s+default\s+function\s+(\w+)/);
-	if (funcMatch) {
-		return funcMatch[1];
-	}
-
-	// Match: export default ComponentName
-	const directMatch = content.match(/export\s+default\s+(\w+)/);
-	if (directMatch) {
-		return directMatch[1];
-	}
-
-	// Match: const ComponentName = ...; export default ComponentName
-	const constExportMatch = content.match(/const\s+(\w+)\s*=[\s\S]*?export\s+default\s+\1/);
-	if (constExportMatch) {
-		return constExportMatch[1];
-	}
-
-	return null;
-}
-
-/**
- * Extract a named export component name (for components without default export)
- * Looks for: export function ComponentName, export const ComponentName, or export { ComponentName }
- */
-function extractNamedExportName(content: string): string | null {
-	// Match: export function ComponentName (PascalCase, likely a React component)
-	const funcMatch = content.match(/export\s+function\s+([A-Z]\w*)/);
-	if (funcMatch) {
-		return funcMatch[1];
-	}
-
-	// Match: export const ComponentName = (PascalCase)
-	const constMatch = content.match(/export\s+const\s+([A-Z]\w*)\s*[=:]/);
-	if (constMatch && constMatch[1] !== 'Preview') {
-		return constMatch[1];
-	}
-
-	// Match: export { ComponentName } or export { ComponentName, ... }
-	// Look for PascalCase names that are likely React components
-	const exportListMatch = content.match(/export\s*\{([^}]+)\}/g);
-	if (exportListMatch) {
-		for (const exportList of exportListMatch) {
-			const names = exportList.match(/\{([^}]+)\}/)?.[1];
-			if (names) {
-				// Split by comma and find PascalCase names
-				const exportedNames = names.split(',').map((n) =>
-					n
-						.trim()
-						.split(/\s+as\s+/)[0]
-						.trim()
-				);
-				for (const name of exportedNames) {
-					// PascalCase and not 'Preview' or variant-related names
-					if (
-						/^[A-Z][a-zA-Z0-9]*$/.test(name) &&
-						name !== 'Preview' &&
-						!name.toLowerCase().includes('variant')
-					) {
-						return name;
-					}
-				}
-			}
-		}
-	}
-
-	// Match: function ComponentName or const ComponentName defined in file (not exported inline)
-	// This catches components that are exported via export { Name } at the end
-	const funcDefMatch = content.match(/function\s+([A-Z][a-zA-Z0-9]*)\s*\(/);
-	if (funcDefMatch && funcDefMatch[1] !== 'Preview') {
-		// Verify it's actually exported
-		const name = funcDefMatch[1];
-		if (new RegExp(`export\\s*\\{[^}]*\\b${name}\\b[^}]*\\}`).test(content)) {
-			return name;
-		}
-	}
-
-	return null;
+	return states.length > 0 ? states : null;
 }
 
 /**

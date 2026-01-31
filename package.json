@@ -18,8 +18,8 @@
     "commands": [
       {
         "command": "live-comp.previewComponent",
-        "title": "Preview React Component States",
-        "icon": "$(preview)"
+        "title": "Preview React Component",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -66,7 +66,8 @@
     "test": "vscode-test"
   },
   "dependencies": {
-    "esbuild": "^0.27.1"
+    "esbuild": "^0.27.1",
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

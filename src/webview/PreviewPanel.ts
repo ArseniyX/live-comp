@@ -14,7 +14,7 @@ export class PreviewPanel {
 	private readonly panel: vscode.WebviewPanel;
 	private readonly _extensionUri: vscode.Uri;
 	private disposables: vscode.Disposable[] = [];
-	private pendingPreview: { config: PreviewConfig; workspaceRoot: string } | null = null;
+	private currentPreview: { config: PreviewConfig; workspaceRoot: string } | null = null;
 
 	private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
 		this.panel = panel;
@@ -42,16 +42,21 @@ export class PreviewPanel {
 
 		// If panel already exists, show it
 		if (PreviewPanel.currentPanel) {
-			PreviewPanel.currentPanel.panel.reveal(column);
+			PreviewPanel.currentPanel.panel.reveal(column, true);
 			return PreviewPanel.currentPanel;
 		}
 
 		// Create new panel
-		const panel = vscode.window.createWebviewPanel('reactPreview', 'React Preview', column, {
-			enableScripts: true,
-			retainContextWhenHidden: true,
-			localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')]
-		});
+		const panel = vscode.window.createWebviewPanel(
+			'reactPreview',
+			'React Preview',
+			{ viewColumn: column, preserveFocus: true },
+			{
+				enableScripts: true,
+				retainContextWhenHidden: true,
+				localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')]
+			}
+		);
 
 		PreviewPanel.currentPanel = new PreviewPanel(panel, extensionUri);
 
@@ -69,22 +74,21 @@ export class PreviewPanel {
 
 		switch (message.type) {
 			case 'ready':
-				console.log('[extension] Webview ready, pendingPreview:', !!this.pendingPreview);
+				console.log('[extension] Webview ready, currentPreview:', !!this.currentPreview);
 				// Webview is ready, send pending preview if any
-				if (this.pendingPreview) {
+				if (this.currentPreview) {
 					await this.sendPreviewToWebview(
-						this.pendingPreview.config,
-						this.pendingPreview.workspaceRoot
+						this.currentPreview.config,
+						this.currentPreview.workspaceRoot
 					);
-					this.pendingPreview = null;
 				}
 				break;
 			case 'refresh':
 				// Handle refresh request
-				if (this.pendingPreview) {
+				if (this.currentPreview) {
 					await this.sendPreviewToWebview(
-						this.pendingPreview.config,
-						this.pendingPreview.workspaceRoot
+						this.currentPreview.config,
+						this.currentPreview.workspaceRoot
 					);
 				}
 				break;
@@ -101,10 +105,29 @@ export class PreviewPanel {
 		this.panel.title = `Preview: ${componentName}`;
 
 		// Store the preview config for when webview is ready
-		this.pendingPreview = { config: previewConfig, workspaceRoot };
+		this.currentPreview = { config: previewConfig, workspaceRoot };
 
 		// Try to send immediately (webview might already be ready)
 		await this.sendPreviewToWebview(previewConfig, workspaceRoot);
+	}
+
+	/**
+	 * Get the current component path being previewed
+	 */
+	public getComponentPath(): string | undefined {
+		return this.currentPreview?.config.componentPath;
+	}
+
+	/**
+	 * Refresh the current preview
+	 */
+	public async refresh(): Promise<void> {
+		if (this.currentPreview) {
+			await this.sendPreviewToWebview(
+				this.currentPreview.config,
+				this.currentPreview.workspaceRoot
+			);
+		}
 	}
 
 	/**

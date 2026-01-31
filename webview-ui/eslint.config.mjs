@@ -33,7 +33,9 @@ export default [
         setTimeout: 'readonly',
         MessageEvent: 'readonly',
         Function: 'readonly',
-        HTMLDivElement: 'readonly'
+        HTMLDivElement: 'readonly',
+        HTMLElement: 'readonly',
+        ShadowRoot: 'readonly'
       }
     },
     settings: {

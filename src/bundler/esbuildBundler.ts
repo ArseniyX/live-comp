@@ -70,7 +70,7 @@ export async function bundleComponent(
 
 		// Clean up temp file
 		fs.unlinkSync(entryPath);
-		fs.rmdirSync(tempDir, { recursive: true });
+		fs.rmSync(tempDir, { recursive: true });
 
 		if (result.errors.length > 0) {
 			errors.push(...result.errors.map((e) => e.text));
@@ -84,7 +84,7 @@ export async function bundleComponent(
 			fs.unlinkSync(entryPath);
 		}
 		if (fs.existsSync(tempDir)) {
-			fs.rmdirSync(tempDir, { recursive: true });
+			fs.rmSync(tempDir, { recursive: true });
 		}
 
 		const message = error instanceof Error ? error.message : String(error);
